@@ -32,9 +32,10 @@ void QMQTT::WebSocketIODevice::binaryMessageReceived(const QByteArray &frame)
 
 qint64 QMQTT::WebSocketIODevice::readData(char *data, qint64 maxSize)
 {
-    int size = qMin(static_cast<int>(maxSize), _buffer.count());
-    for (int i=0; i<size; ++ i)
-        data[i] = _buffer[i];
+    int size = qMin(static_cast<int>(maxSize), _buffer.size());
+    if (size <= 0) return 0;
+
+    memcpy(data, _buffer.constData(), size);
     _buffer.remove(0, size);
     return size;
 }

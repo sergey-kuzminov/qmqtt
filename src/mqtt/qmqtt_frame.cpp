@@ -42,18 +42,21 @@ Q_LOGGING_CATEGORY(frame, "qmqtt.frame")
 Frame::Frame()
     : _header(0)
     , _data(QByteArray())
+    , _readOffset(0)
 {
 }
 
 Frame::Frame(const quint8 header)
     : _header(header)
     , _data(QByteArray())
+    , _readOffset(0)
 {
 }
 
 Frame::Frame(const quint8 header, const QByteArray &data)
     : _header(header)
     , _data(data)
+    , _readOffset(0)
 {
 }
 
@@ -61,12 +64,14 @@ Frame::Frame(const Frame& other)
 {
     _header = other._header;
     _data = other._data;
+    _readOffset = other._readOffset;
 }
 
 Frame& Frame::operator=(const Frame& other)
 {
     _header = other._header;
     _data = other._data;
+    _readOffset = other._readOffset;
     return *this;
 }
 
@@ -88,37 +93,51 @@ quint8 Frame::header() const
 
 QByteArray Frame::data() const
 {
+    if (_readOffset >= _data.size()) {
+        return QByteArray();
+    }
+    if (_readOffset > 0) {
+        return _data.mid(_readOffset);
+    }
     return _data;
 }
 
 quint8 Frame::readChar()
 {
-    char c = _data.at(0);
-    _data.remove(0, 1);
+    if (_readOffset >= _data.size()) return 0;
+    quint8 c = static_cast<quint8>(_data.at(_readOffset));
+    _readOffset++;
     return c;
 }
 
 quint16 Frame::readInt()
 {
-    quint8 msb = static_cast<quint8>(_data.at(0));
-    quint8 lsb = static_cast<quint8>(_data.at(1));
-    _data.remove(0, 2);
+    if (_readOffset + 1 >= _data.size()) return 0;
+    quint8 msb = static_cast<quint8>(_data.at(_readOffset));
+    quint8 lsb = static_cast<quint8>(_data.at(_readOffset + 1));
+    _readOffset += 2;
     return (msb << 8) | lsb;
 }
 
 QByteArray Frame::readByteArray()
 {
     quint16 len = readInt();
-    QByteArray data = _data.left(len);
-    _data.remove(0, len);
+    if (len > _data.size() - _readOffset) {
+        len = _data.size() - _readOffset;
+    }
+    QByteArray data = _data.mid(_readOffset, len);
+    _readOffset += len;
     return data;
 }
 
 QString Frame::readString()
 {
     quint16 len = readInt();
-    QString s = QString::fromUtf8(_data.left(len));
-    _data.remove(0, len);
+    if (len > _data.size() - _readOffset) {
+        len = _data.size() - _readOffset;
+    }
+    QString s = QString::fromUtf8(_data.constData() + _readOffset, len);
+    _readOffset += len;
     return s;
 }
 

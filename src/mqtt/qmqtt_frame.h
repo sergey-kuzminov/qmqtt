@@ -128,6 +128,7 @@ public:
 private:
     quint8 _header;
     QByteArray _data;
+    int _readOffset;
 };
 
 } // namespace QMQTT
