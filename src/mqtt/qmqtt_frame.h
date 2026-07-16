@@ -60,8 +60,8 @@ QT_FORWARD_DECLARE_CLASS(QDataStream)
 #define PINGRESP 0xD0
 #define DISCONNECT 0xE0
 
-#define LSB(A) quint8(A & 0x00FF)
-#define MSB(A) quint8((A & 0xFF00) >> 8)
+constexpr inline quint8 LSB(quint16 A) { return quint8(A & 0x00FF); }
+constexpr inline quint8 MSB(quint16 A) { return quint8((A & 0xFF00) >> 8); }
 
 /*
 |--------------------------------------
@@ -69,13 +69,13 @@ QT_FORWARD_DECLARE_CLASS(QDataStream)
 |  Type   | DUP flag |  QoS  | RETAIN |
 |--------------------------------------
 */
-#define GETTYPE(HDR)		(HDR & 0xF0)
-#define SETQOS(HDR, Q)		(HDR | ((Q) << 1))
-#define GETQOS(HDR)			((HDR & 0x06) >> 1)
-#define SETDUP(HDR, D)		(HDR | ((D) << 3))
-#define GETDUP(HDR)			((HDR & 0x08) >> 3)
-#define SETRETAIN(HDR, R)	(HDR | (R))
-#define GETRETAIN(HDR)		(HDR & 0x01)
+constexpr inline quint8 GETTYPE  (quint8 HDR)           { return HDR & 0xF0; }
+constexpr inline quint8 SETQOS   (quint8 HDR, quint8 Q) { return (HDR & ~0x06) | ((Q & 0x03) << 1); }
+constexpr inline quint8 GETQOS   (quint8 HDR)           { return (HDR & 0x06) >> 1; }
+constexpr inline quint8 SETDUP   (quint8 HDR, quint8 D) { return (HDR & ~0x08) | ((D & 0x01) << 3); }
+constexpr inline quint8 GETDUP   (quint8 HDR)           { return (HDR & 0x08) >> 3; }
+constexpr inline quint8 SETRETAIN(quint8 HDR, quint8 R) { return (HDR & ~0x01) | (R & 0x01); }
+constexpr inline quint8 GETRETAIN(quint8 HDR)           { return HDR & 0x01; }
 
 /*
 |----------------------------------------------------------------------------------
@@ -83,12 +83,12 @@ QT_FORWARD_DECLARE_CLASS(QDataStream)
 | username | password | willretain | willqos | willflag | cleansession | reserved |
 |----------------------------------------------------------------------------------
 */
-#define FLAG_CLEANSESS(F, C)	(F | ((C) << 1))
-#define FLAG_WILL(F, W)			(F | ((W) << 2))
-#define FLAG_WILLQOS(F, Q)		(F | ((Q) << 3))
-#define FLAG_WILLRETAIN(F, R) 	(F | ((R) << 5))
-#define FLAG_PASSWD(F, P)		(F | ((P) << 6))
-#define FLAG_USERNAME(F, U)		(F | ((U) << 7))
+constexpr inline quint8 FLAG_CLEANSESS (quint8 F, quint8 C) { return (F & ~0x02) | ((C & 0x01) << 1); }
+constexpr inline quint8 FLAG_WILL      (quint8 F, quint8 W) { return (F & ~0x04) | ((W & 0x01) << 2); }
+constexpr inline quint8 FLAG_WILLQOS   (quint8 F, quint8 Q) { return (F & ~0x18) | ((Q & 0x03) << 3); }
+constexpr inline quint8 FLAG_WILLRETAIN(quint8 F, quint8 R) { return (F & ~0x20) | ((R & 0x01) << 5); }
+constexpr inline quint8 FLAG_PASSWD    (quint8 F, quint8 P) { return (F & ~0x40) | ((P & 0x01) << 6); }
+constexpr inline quint8 FLAG_USERNAME  (quint8 F, quint8 U) { return (F & ~0x80) | ((U & 0x01) << 7); }
 
 namespace QMQTT {
 
