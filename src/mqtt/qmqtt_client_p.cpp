@@ -55,7 +55,7 @@ QMQTT::ClientPrivate::ClientPrivate(Client* qq_ptr)
 #ifndef QT_NO_SSL
     , _ignoreSelfSigned(false)
 #endif // QT_NO_SSL
-    , _gmid(1)
+    , _gmid(0)
     , _version(MQTTVersion::V3_1_0)
     , _clientId(QUuid::createUuid().toString())
     , _cleanSession(false)
@@ -256,8 +256,10 @@ quint16 QMQTT::ClientPrivate::sendPublish(const Message &message)
     Frame frame(header);
     frame.writeString(message.topic());
     if(message.qos() > QOS0) {
-        if (msgid == 0)
+        if (msgid == 0) {
             msgid = nextmid();
+            if (msgid == 0) return 0;
+        }
         frame.writeInt(msgid);
     }
     if(!message.payload().isEmpty()) {
@@ -277,6 +279,8 @@ void QMQTT::ClientPrivate::sendPuback(const quint8 type, const quint16 mid)
 quint16 QMQTT::ClientPrivate::sendSubscribe(const QString & topic, const quint8 qos)
 {
     quint16 mid = nextmid();
+    if (mid == 0) return 0;
+
     Frame frame(SETQOS(SUBSCRIBE, QOS1));
     frame.writeInt(mid);
     frame.writeString(topic);
@@ -288,6 +292,8 @@ quint16 QMQTT::ClientPrivate::sendSubscribe(const QString & topic, const quint8 
 quint16 QMQTT::ClientPrivate::sendUnsubscribe(const QString &topic)
 {
     quint16 mid = nextmid();
+    if (mid == 0) return 0;
+
     Frame frame(SETQOS(UNSUBSCRIBE, QOS1));
     frame.writeInt(mid);
     frame.writeString(topic);
@@ -338,12 +344,17 @@ void QMQTT::ClientPrivate::stopKeepAlive()
 
 quint16 QMQTT::ClientPrivate::nextmid()
 {
-    const quint16 result = _gmid;
-    _gmid++;
-    if (_gmid == 0)
-      _gmid++;
+    for (quint32 i = 0; i < 0xFFFF; ++i) {
+        _gmid++;
+        if (_gmid == 0)
+            _gmid++;
 
-    return result;
+        if (!_midToMessage.contains(_gmid) && !_midToTopic.contains(_gmid))
+            return _gmid;
+    }
+
+    qWarning("qmqtt: Out of packet IDs");
+    return 0;
 }
 
 quint16 QMQTT::ClientPrivate::publish(const Message& message)
@@ -354,8 +365,11 @@ quint16 QMQTT::ClientPrivate::publish(const Message& message)
     // Emit published only at QOS0
     if (message.qos() == QOS0)
         emit q->published(message, msgid);
-    else
+    else if (msgid == 0) {
+        emit q->error(MqttOutOfPacketIdsError);
+    } else {
         _midToMessage[msgid] = message;
+    }
 
     return msgid;
 }
@@ -367,14 +381,22 @@ void QMQTT::ClientPrivate::puback(const quint8 type, const quint16 msgid)
 
 void QMQTT::ClientPrivate::subscribe(const QString& topic, const quint8 qos)
 {
+    Q_Q(Client);
     quint16 msgid = sendSubscribe(topic, qos);
-    _midToTopic[msgid] = topic;
+    if (msgid == 0)
+        emit q->error(MqttOutOfPacketIdsError);
+    else
+        _midToTopic[msgid] = topic;
 }
 
 void QMQTT::ClientPrivate::unsubscribe(const QString& topic)
 {
+    Q_Q(Client);
     quint16 msgid = sendUnsubscribe(topic);
-    _midToTopic[msgid] = topic;
+    if (msgid == 0)
+        emit q->error(MqttOutOfPacketIdsError);
+    else
+        _midToTopic[msgid] = topic;
 }
 
 void QMQTT::ClientPrivate::onNetworkDisconnected()
