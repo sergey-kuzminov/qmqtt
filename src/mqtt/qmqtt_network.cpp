@@ -250,9 +250,11 @@ void QMQTT::Network::onSocketReadReady()
                         _readState = Header;
                         _length = 0;
                         _shift = 0;
-                        emit error(QAbstractSocket::SocketError::UnknownSocketError);
                         _data.clear();
                         _readPos = 0;
+
+                        emit error(QAbstractSocket::SocketError::UnknownSocketError);
+                        disconnectFromHost();
                         return;
                     }
                     continue;
