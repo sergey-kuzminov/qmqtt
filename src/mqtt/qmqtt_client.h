@@ -112,7 +112,8 @@ enum ClientError
     MqttServerUnavailableError,
     MqttBadUserNameOrPasswordError,
     MqttNotAuthorizedError,
-    MqttNoPingResponse
+    MqttNoPingResponse,
+    MqttOutOfPacketIdsError
 };
 Q_ENUM_NS(ClientError)
 
