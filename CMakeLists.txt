@@ -139,7 +139,7 @@ set_target_properties( ${PROJECT_NAME}
         VERSION                   ${PROJECT_VERSION}
         SOVERSION                 ${PROJECT_VERSION_MAJOR}
         CXX_STANDARD              11
-        CXX_STANDARD_REQUIRED     OFF  # Whether CXX_STANDARD is enforced
+        CXX_STANDARD_REQUIRED     ON  # Whether CXX_STANDARD is enforced
 )
 
 if ( ${CMAKE_HOST_WIN32} )
