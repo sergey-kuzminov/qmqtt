@@ -52,6 +52,7 @@ QMQTT::Network::Network(QObject* parent)
     , _socket(new QMQTT::Socket)
     , _autoReconnectTimer(new QMQTT::Timer)
     , _readState(Header)
+    , _readPos(0)
 {
     initialize();
 }
@@ -65,6 +66,7 @@ QMQTT::Network::Network(const QSslConfiguration& config, QObject *parent)
     , _socket(new QMQTT::SslSocket(config))
     , _autoReconnectTimer(new QMQTT::Timer)
     , _readState(Header)
+    , _readPos(0)
 {
     initialize();
     connect(_socket, &QMQTT::SslSocket::sslErrors, this, &QMQTT::Network::sslErrors);
@@ -84,6 +86,7 @@ QMQTT::Network::Network(const QString& origin,
     , _socket(new QMQTT::WebSocket(origin, version, sslConfig))
     , _autoReconnectTimer(new QMQTT::Timer)
     , _readState(Header)
+    , _readPos(0)
 {
     initialize();
 }
@@ -99,6 +102,7 @@ QMQTT::Network::Network(const QString& origin,
     , _socket(new QMQTT::WebSocket(origin, version))
     , _autoReconnectTimer(new QMQTT::Timer)
     , _readState(Header)
+    , _readPos(0)
 {
     initialize();
 }
@@ -113,6 +117,7 @@ QMQTT::Network::Network(SocketInterface* socketInterface, TimerInterface* timerI
     , _socket(socketInterface)
     , _autoReconnectTimer(timerInterface)
     , _readState(Header)
+    , _readPos(0)
 {
     initialize();
 }
@@ -223,45 +228,70 @@ void QMQTT::Network::onSocketReadReady()
 {
     QIODevice *ioDevice = _socket->ioDevice();
     // Only read the available (cached) bytes, so the read will never block.
-    QByteArray data = ioDevice->read(ioDevice->bytesAvailable());
-    foreach(char byte, data) {
-        switch (_readState) {
-        case Header:
-            _header = static_cast<quint8>(byte);
+    _data.append(ioDevice->read(ioDevice->bytesAvailable()));
+
+    while (_readPos < _data.size()) {
+        if (_readState == Header) {
+            _header = static_cast<quint8>(_data.at(_readPos++));
             _readState = Length;
             _length = 0;
             _shift = 0;
-            _data.resize(0); // keep allocated buffer
-            break;
-        case Length:
-            _length |= (byte & 0x7F) << _shift;
-            _shift += 7;
-            if ((byte & 0x80) != 0) {
-                if (_shift > 21) { // only up to 4 bytes (3*7 shifts)
-                    _readState = Header;
-                    emit error(QAbstractSocket::SocketError::UnknownSocketError);
+        }
+
+        if (_readState == Length) {
+            bool lengthComplete = false;
+            while (_readPos < _data.size()) {
+                char byte = _data.at(_readPos++);
+                _length |= (byte & 0x7F) << _shift;
+                _shift += 7;
+                if ((byte & 0x80) != 0) {
+                    if (_shift > 21) { // only up to 4 bytes (3*7 shifts)
+                        _readState = Header;
+                        _length = 0;
+                        _shift = 0;
+                        emit error(QAbstractSocket::SocketError::UnknownSocketError);
+                        _data.clear();
+                        _readPos = 0;
+                        return;
+                    }
+                    continue;
                 }
+                lengthComplete = true;
                 break;
             }
+
+            if (!lengthComplete) break;
+
             if (_length == 0) {
                 _readState = Header;
-                Frame frame(_header, _data);
+                Frame frame(_header, QByteArray());
                 emit received(frame);
-                break;
+                continue;
             }
             _readState = PayLoad;
-            _data.reserve(_length);
-            break;
-        case PayLoad:
-            _data.append(byte);
-            --_length;
-            if (_length > 0)
-                break;
-            _readState = Header;
-            Frame frame(_header, _data);
-            emit received(frame);
-            break;
         }
+
+        if (_readState == PayLoad) {
+            int available = _data.size() - _readPos;
+            if (available < _length) break;
+
+            QByteArray payload = _data.mid(_readPos, _length);
+            _readPos += _length;
+
+            _readState = Header;
+            Frame frame(_header, payload);
+            emit received(frame);
+
+            if (_readPos == _data.size()) {
+                _data.clear();
+                _readPos = 0;
+            }
+        }
+    }
+
+    if (_readPos > 0 && _data.size() - _readPos < 1024) {
+        _data.remove(0, _readPos);
+        _readPos = 0;
     }
 }
 

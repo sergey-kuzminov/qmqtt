@@ -123,6 +123,7 @@ protected:
     quint8 _header;
     int _length;
     int _shift;
+    int _readPos;
     QByteArray _data;
 
 protected Q_SLOTS:
