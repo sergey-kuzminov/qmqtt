@@ -104,7 +104,7 @@ public:
     bool _willRetain;
     QByteArray _willMessage;
     QHash<quint16, QString> _midToTopic;
-    QHash<quint16, Message> _midToMessage;
+    QMap <quint16, Message> _midToMessage;
 
     Client* const q_ptr;
 
