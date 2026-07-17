@@ -194,6 +194,11 @@ void QMQTT::ClientPrivate::onNetworkConnected()
 
 void QMQTT::ClientPrivate::sendConnect()
 {
+    if (_cleanSession) {
+        _midToTopic.clear();
+        _midToMessage.clear();
+    }
+
     quint8 header = CONNECT;
     quint8 flags = 0;
 
@@ -256,10 +261,6 @@ quint16 QMQTT::ClientPrivate::sendPublish(const Message &message)
     Frame frame(header);
     frame.writeString(message.topic());
     if(message.qos() > QOS0) {
-        if (msgid == 0) {
-            msgid = nextmid();
-            if (msgid == 0) return 0;
-        }
         frame.writeInt(msgid);
     }
     if(!message.payload().isEmpty()) {
@@ -360,18 +361,30 @@ quint16 QMQTT::ClientPrivate::nextmid()
 quint16 QMQTT::ClientPrivate::publish(const Message& message)
 {
     Q_Q(Client);
-    quint16 msgid = sendPublish(message);
 
-    // Emit published only at QOS0
-    if (message.qos() == QOS0)
+    if (message.qos() == QOS0) {
+        quint16 msgid = sendPublish(message);
         emit q->published(message, msgid);
-    else if (msgid == 0) {
-        emit q->error(MqttOutOfPacketIdsError);
-    } else {
-        _midToMessage[msgid] = message;
+        return msgid;
     }
 
-    return msgid;
+    Message msg = message;
+    if (msg.id() == 0) {
+        quint16 newId = nextmid();
+        if (newId == 0) {
+            emit q->error(MqttOutOfPacketIdsError);
+            return 0;
+        }
+        msg.setId(newId);
+    }
+
+    _midToMessage[msg.id()] = msg;
+
+    if (_connectionState == STATE_CONNECTED) {
+        sendPublish(msg);
+    }
+
+    return msg.id();
 }
 
 void QMQTT::ClientPrivate::puback(const quint8 type, const quint16 msgid)
@@ -404,8 +417,12 @@ void QMQTT::ClientPrivate::onNetworkDisconnected()
     Q_Q(Client);
 
     stopKeepAlive();
-    _midToTopic.clear();
-    _midToMessage.clear();
+
+    if (_cleanSession) {
+        _midToTopic.clear();
+        _midToMessage.clear();
+    }
+
     _connectionState = ConnectionState::STATE_DISCONNECTED;
     emit q->disconnected();
 }
@@ -471,6 +488,12 @@ void QMQTT::ClientPrivate::handleConnack(const quint8 ack)
     case 0:
         _connectionState = ConnectionState::STATE_CONNECTED;
         emit q->connected();
+
+        for (const Message& msg : _midToMessage) {
+            Message retransmitMsg = msg;
+            retransmitMsg.setDup(true);
+            sendPublish(retransmitMsg);
+        }
         break;
     case 1:
         emit q->error(MqttUnacceptableProtocolVersionError);
