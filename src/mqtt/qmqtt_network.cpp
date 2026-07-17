@@ -43,7 +43,6 @@ const quint16 DEFAULT_PORT = 1883;
 const quint16 DEFAULT_SSL_PORT = 8883;
 const bool DEFAULT_AUTORECONNECT = false;
 const int DEFAULT_AUTORECONNECT_INTERVAL_MS = 5000;
-const int BUFFER_DEFRAGMENT_THRESHOLD = 1024;
 
 QMQTT::Network::Network(QObject* parent)
     : NetworkInterface(parent)
@@ -250,9 +249,11 @@ void QMQTT::Network::onSocketReadReady()
                         _readState = Header;
                         _length = 0;
                         _shift = 0;
-                        emit error(QAbstractSocket::SocketError::UnknownSocketError);
                         _data.clear();
                         _readPos = 0;
+
+                        emit error(QAbstractSocket::SocketError::UnknownSocketError);
+                        disconnectFromHost();
                         return;
                     }
                     continue;
@@ -290,9 +291,7 @@ void QMQTT::Network::onSocketReadReady()
         }
     }
 
-    // Defragmentation (via remove) is only needed for "leftovers" — when there are pieces of the
-    // next packet in the buffer due to TCP fragmentation, or when multiple packets arrive at once.
-    if (_readPos > 0 && _data.size() - _readPos < BUFFER_DEFRAGMENT_THRESHOLD) {
+    if (_readPos > 0 && _data.size() - _readPos < 1024) {
         _data.remove(0, _readPos);
         _readPos = 0;
     }
