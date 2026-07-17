@@ -105,6 +105,7 @@ public:
     QByteArray _willMessage;
     QHash<quint16, QString> _midToTopic;
     QMap <quint16, Message> _midToMessage;
+    QHash<quint16, Message> _midToIncomingQos2;
 
     Client* const q_ptr;
 

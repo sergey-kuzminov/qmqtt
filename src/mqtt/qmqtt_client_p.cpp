@@ -197,6 +197,7 @@ void QMQTT::ClientPrivate::sendConnect()
     if (_cleanSession) {
         _midToTopic.clear();
         _midToMessage.clear();
+        _midToIncomingQos2.clear();
     }
 
     quint8 header = CONNECT;
@@ -421,6 +422,7 @@ void QMQTT::ClientPrivate::onNetworkDisconnected()
     if (_cleanSession) {
         _midToTopic.clear();
         _midToMessage.clear();
+        _midToIncomingQos2.clear();
     }
 
     _connectionState = ConnectionState::STATE_DISCONNECTED;
@@ -523,12 +525,19 @@ void QMQTT::ClientPrivate::handlePublish(const Message& message)
     if(message.qos() == QOS1)
     {
         sendPuback(PUBACK, message.id());
+        emit q->received(message);
     }
     else if(message.qos() == QOS2)
     {
+        if (!_midToIncomingQos2.contains(message.id())) {
+            _midToIncomingQos2.insert(message.id(), message);
+        }
         sendPuback(PUBREC, message.id());
     }
-    emit q->received(message);
+    else // QoS 0
+    {
+        emit q->received(message);
+    }
 }
 
 void QMQTT::ClientPrivate::handlePuback(const quint8 type, const quint16 msgid)
@@ -541,6 +550,9 @@ void QMQTT::ClientPrivate::handlePuback(const quint8 type, const quint16 msgid)
         sendPuback(SETQOS(PUBREL, QOS1), msgid);
         break;
     case PUBREL:
+        if (_midToIncomingQos2.contains(msgid)) {
+            emit q->received(_midToIncomingQos2.take(msgid));
+        }
         sendPuback(PUBCOMP, msgid);
         break;
     case PUBACK:
